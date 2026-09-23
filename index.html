@@ -134,7 +134,7 @@ h1 {
 
 .tile.removing { transform: scale(0); opacity: 0; }
 
-.tile .icon-small { font-size: 12px; margin-right: 1px; }
+.tile .icon-small { font-size: calc(var(--tile-size) * 0.4); margin-right: 2px; }
 
 /* 名字颜色 */
 .tile.color-0 { background: linear-gradient(135deg, #e94560, #c72a40); color: #fff; }
@@ -562,11 +562,11 @@ function getTileIcon(tile) {
 }
 
 function getSpecialIcon(type, color) {
-  if (type === TYPE_ROCKET_H) return `<span class="icon-small">🚀</span>${NAMES[color]}`;
-  if (type === TYPE_ROCKET_V) return `<span class="icon-small">🚀</span>${NAMES[color]}`;
-  if (type === TYPE_PLANE) return `<span class="icon-small">✈️</span>${NAMES[color]}`;
-  if (type === TYPE_BOMB) return `<span class="icon-small">💣</span>${NAMES[color]}`;
-  if (type === TYPE_RAINBOW) return '🌈';
+  if (type === TYPE_ROCKET_H) return `<span class="icon-small">🚀</span><span>${NAMES[color]}</span>`;
+  if (type === TYPE_ROCKET_V) return `<span class="icon-small">🚀</span><span>${NAMES[color]}</span>`;
+  if (type === TYPE_PLANE) return `<span class="icon-small">✈️</span><span>${NAMES[color]}</span>`;
+  if (type === TYPE_BOMB) return `<span class="icon-small">💣</span><span>${NAMES[color]}</span>`;
+  if (type === TYPE_RAINBOW) return `<span class="icon-small">🌈</span>`;
   return '';
 }
 
