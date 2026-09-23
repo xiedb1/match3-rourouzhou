@@ -413,7 +413,7 @@ h1 {
 <div class="board-wrap"><div id="board"></div></div>
 
 <p class="hint">
-  4连一线→火箭🚀 ｜ 4连L/T→纸飞机✈️ ｜ 5连L/T→炸弹💣 ｜ 5连一线→彩虹球🌈<br>
+  4连一线→火箭🚀 ｜ 田字形2×2→纸飞机✈️ ｜ 5连L/T形→炸弹💣 ｜ 5连一线→彩虹球🌈<br>
   特殊方块交换即引爆 ｜ 两个特殊方块交换产生组合效果
 </p>
 
@@ -779,11 +779,46 @@ function findMatches() {
     }
   }
 
+  // 检测田字形（2×2正方形）
+  const squareMatches = [];
+  const usedBySquare = new Set();
+  for (let r = 0; r < ROWS - 1; r++) {
+    for (let c = 0; c < COLS - 1; c++) {
+      const t00 = board[r][c], t01 = board[r][c+1], t10 = board[r+1][c], t11 = board[r+1][c+1];
+      if (!t00 || !t01 || !t10 || !t11) continue;
+      if (t00.obstacle !== OBSTACLE_NONE || t01.obstacle !== OBSTACLE_NONE ||
+          t10.obstacle !== OBSTACLE_NONE || t11.obstacle !== OBSTACLE_NONE) continue;
+      if (t00.type !== TYPE_NORMAL || t01.type !== TYPE_NORMAL ||
+          t10.type !== TYPE_NORMAL || t11.type !== TYPE_NORMAL) continue;
+      if (t00.color === t01.color && t00.color === t10.color && t00.color === t11.color) {
+        const tiles = [[r,c],[r,c+1],[r+1,c],[r+1,c+1]];
+        squareMatches.push({ tiles, dir: 'square', count: 4, color: t00.color });
+        for (const t of tiles) usedBySquare.add(`${t[0]},${t[1]}`);
+      }
+    }
+  }
+
+  // 加入田字形匹配（优先级高，不和L/T形重复）
+  for (const sq of squareMatches) {
+    // 检查是否和已有L/T形重叠
+    const overlap = sq.tiles.some(t => {
+      return result.some(m => m.tiles.some(mt => mt[0] === t[0] && mt[1] === t[1]));
+    });
+    if (!overlap) result.push(sq);
+  }
+
   for (let i = 0; i < hMatches.length; i++) {
-    if (!usedH.has(i)) result.push(hMatches[i]);
+    if (!usedH.has(i)) {
+      // 跳过已被田字形包含的
+      const overlap = hMatches[i].tiles.some(t => usedBySquare.has(`${t[0]},${t[1]}`));
+      if (!overlap) result.push(hMatches[i]);
+    }
   }
   for (let j = 0; j < vMatches.length; j++) {
-    if (!usedV.has(j)) result.push(vMatches[j]);
+    if (!usedV.has(j)) {
+      const overlap = vMatches[j].tiles.some(t => usedBySquare.has(`${t[0]},${t[1]}`));
+      if (!overlap) result.push(vMatches[j]);
+    }
   }
 
   return result;
@@ -818,13 +853,15 @@ async function processChain() {
 
       // 生成特殊方块
       const mid = m.tiles[Math.floor(m.tiles.length / 2)];
-      if (m.dir === 'lt') {
+      if (m.dir === 'square') {
+        // 田字形 → 纸飞机
+        specialsToCreate.push({ r: mid[0], c: mid[1], color: m.color, type: TYPE_PLANE });
+      } else if (m.dir === 'lt') {
         // L/T形
         if (m.count >= 5) {
           specialsToCreate.push({ r: mid[0], c: mid[1], color: m.color, type: TYPE_BOMB });
-        } else {
-          specialsToCreate.push({ r: mid[0], c: mid[1], color: m.color, type: TYPE_PLANE });
         }
+        // 4连L/T形不生成道具（梦幻家园里L/T 5连才给炸弹）
       } else {
         // 纯线形
         if (m.count >= 5) {
