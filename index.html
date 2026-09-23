@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>开心消消乐</title>
+<title>肉肉的消消乐</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -400,7 +400,7 @@ h1 {
 </head>
 <body>
 
-<h1>开心消消乐</h1>
+<h1>肉肉的消消乐</h1>
 
 <div class="hud">
   <div class="hud-item"><span class="hud-label">关卡</span><span class="hud-value level" id="level">1</span></div>
@@ -980,12 +980,26 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
   const types = new Set([t1.type, t2.type]);
   const toRemove = new Set();
 
+  // 辅助：统计消除的颜色和障碍物
+  function trackRemoval(key) {
+    const [r, c] = key.split(',').map(Number);
+    const tile = board[r][c];
+    if (!tile) return;
+    if (tile.obstacle === OBSTACLE_NONE) {
+      for (const obj of objectives) {
+        if (obj.type === 'color' && obj.color === tile.color && obj.done < obj.need) obj.done++;
+      }
+    }
+  }
+
   // 彩虹 + 彩虹 → 全屏清除 + 彩蛋
   if (types.has(TYPE_RAINBOW) && types.has(TYPE_RAINBOW)) {
     showEasterEgg();
     for (let r = 0; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++)
+      for (let c = 0; c < COLS; c++) {
         toRemove.add(`${r},${c}`);
+        trackRemoval(`${r},${c}`);
+      }
     score += toRemove.size * 20;
     showEffect('全屏清除！');
     await sleep(800);
@@ -998,15 +1012,21 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
     const otherType = t1.type === TYPE_RAINBOW ? t2.type : t1.type;
     const otherColor = t1.type === TYPE_RAINBOW ? t2.color : t1.color;
     toRemove.add(`${r1},${c1}`); toRemove.add(`${r2},${c2}`);
+    trackRemoval(`${r1},${c1}`); trackRemoval(`${r2},${c2}`);
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) {
         const tile = board[r][c];
         if (tile.color === otherColor && tile.obstacle === OBSTACLE_NONE) {
-          // 模拟火箭引爆
           if (otherType === TYPE_ROCKET_H) {
-            for (let i = 0; i < COLS; i++) toRemove.add(`${r},${i}`);
+            for (let i = 0; i < COLS; i++) {
+              const key = `${r},${i}`;
+              if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+            }
           } else {
-            for (let i = 0; i < ROWS; i++) toRemove.add(`${i},${c}`);
+            for (let i = 0; i < ROWS; i++) {
+              const key = `${i},${c}`;
+              if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+            }
           }
         }
       }
@@ -1020,13 +1040,17 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
   if (types.has(TYPE_RAINBOW) && types.has(TYPE_BOMB)) {
     const otherColor = t1.type === TYPE_RAINBOW ? t2.color : t1.color;
     toRemove.add(`${r1},${c1}`); toRemove.add(`${r2},${c2}`);
+    trackRemoval(`${r1},${c1}`); trackRemoval(`${r2},${c2}`);
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) {
         if (board[r][c].color === otherColor && board[r][c].obstacle === OBSTACLE_NONE) {
           for (let dr = -1; dr <= 1; dr++)
             for (let dc = -1; dc <= 1; dc++) {
               const nr = r+dr, nc = c+dc;
-              if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) toRemove.add(`${nr},${nc}`);
+              if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+                const key = `${nr},${nc}`;
+                if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+              }
             }
         }
       }
@@ -1040,16 +1064,19 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
   if (types.has(TYPE_RAINBOW) && types.has(TYPE_PLANE)) {
     const otherColor = t1.type === TYPE_RAINBOW ? t2.color : t1.color;
     toRemove.add(`${r1},${c1}`); toRemove.add(`${r2},${c2}`);
-    const planeTargets = findPlaneTargets(r1, c1, 99);
+    trackRemoval(`${r1},${c1}`); trackRemoval(`${r2},${c2}`);
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) {
         if (board[r][c].color === otherColor && board[r][c].obstacle === OBSTACLE_NONE) {
-          toRemove.add(`${r},${c}`);
-          // 每个同色方块周围也炸
+          const key = `${r},${c}`;
+          if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
           for (let dr = -1; dr <= 1; dr++)
             for (let dc = -1; dc <= 1; dc++) {
               const nr = r+dr, nc = c+dc;
-              if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) toRemove.add(`${nr},${nc}`);
+              if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+                const k = `${nr},${nc}`;
+                if (!toRemove.has(k)) { toRemove.add(k); trackRemoval(k); }
+              }
             }
         }
       }
@@ -1063,8 +1090,14 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
   if ((types.has(TYPE_ROCKET_H) || types.has(TYPE_ROCKET_V)) && (types.has(TYPE_ROCKET_H) || types.has(TYPE_ROCKET_V))) {
     const midR = Math.round((r1 + r2) / 2);
     const midC = Math.round((c1 + c2) / 2);
-    for (let i = 0; i < COLS; i++) toRemove.add(`${midR},${i}`);
-    for (let i = 0; i < ROWS; i++) toRemove.add(`${i},${midC}`);
+    for (let i = 0; i < COLS; i++) {
+      const key = `${midR},${i}`;
+      if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+    }
+    for (let i = 0; i < ROWS; i++) {
+      const key = `${i},${midC}`;
+      if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+    }
     score += toRemove.size * 15;
     showEffect('双重火箭！');
     await removeAndCascade(toRemove);
@@ -1078,7 +1111,10 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
     for (let dr = -2; dr <= 2; dr++)
       for (let dc = -2; dc <= 2; dc++) {
         const nr = midR+dr, nc = midC+dc;
-        if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) toRemove.add(`${nr},${nc}`);
+        if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+          const key = `${nr},${nc}`;
+          if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+        }
       }
     score += toRemove.size * 15;
     showEffect('双重炸弹！');
@@ -1094,12 +1130,18 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
     for (let i = 0; i < COLS; i++)
       for (let dr = -1; dr <= 1; dr++) {
         const nr = br + dr;
-        if (nr>=0&&nr<ROWS) toRemove.add(`${nr},${i}`);
+        if (nr>=0&&nr<ROWS) {
+          const key = `${nr},${i}`;
+          if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+        }
       }
     for (let i = 0; i < ROWS; i++)
       for (let dc = -1; dc <= 1; dc++) {
         const nc = bc + dc;
-        if (nc>=0&&nc<COLS) toRemove.add(`${i},${nc}`);
+        if (nc>=0&&nc<COLS) {
+          const key = `${i},${nc}`;
+          if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+        }
       }
     score += toRemove.size * 15;
     showEffect('火箭炸弹！');
@@ -1110,13 +1152,18 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
   // 纸飞机 + 纸飞机 → 3架飞机
   if (types.has(TYPE_PLANE) && types.has(TYPE_PLANE)) {
     toRemove.add(`${r1},${c1}`); toRemove.add(`${r2},${c2}`);
+    trackRemoval(`${r1},${c1}`); trackRemoval(`${r2},${c2}`);
     const targets = findPlaneTargets(r1, c1, 3);
     for (const [tr, tc] of targets) {
-      toRemove.add(`${tr},${tc}`);
+      const key = `${tr},${tc}`;
+      if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
       for (let dr = -1; dr <= 1; dr++)
         for (let dc = -1; dc <= 1; dc++) {
           const nr = tr+dr, nc = tc+dc;
-          if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) toRemove.add(`${nr},${nc}`);
+          if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+            const k = `${nr},${nc}`;
+            if (!toRemove.has(k)) { toRemove.add(k); trackRemoval(k); }
+          }
         }
     }
     score += toRemove.size * 15;
@@ -1132,21 +1179,34 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
     const rr = rocketIs1 ? r1 : r2;
     const rc = rocketIs1 ? c1 : c2;
     toRemove.add(`${r1},${c1}`); toRemove.add(`${r2},${c2}`);
+    trackRemoval(`${r1},${c1}`); trackRemoval(`${r2},${c2}`);
     // 火箭效果
     if (rocketType === TYPE_ROCKET_H) {
-      for (let i = 0; i < COLS; i++) toRemove.add(`${rr},${i}`);
+      for (let i = 0; i < COLS; i++) {
+        const key = `${rr},${i}`;
+        if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+      }
     } else {
-      for (let i = 0; i < ROWS; i++) toRemove.add(`${i},${rc}`);
+      for (let i = 0; i < ROWS; i++) {
+        const key = `${i},${rc}`;
+        if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+      }
     }
     // 飞机飞向目标
     const targets = findPlaneTargets(r1, c1, 1);
     for (const [tr, tc] of targets) {
-      toRemove.add(`${tr},${tc}`);
-      // 飞机目标也触发火箭效果
+      const key = `${tr},${tc}`;
+      if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
       if (rocketType === TYPE_ROCKET_H) {
-        for (let i = 0; i < COLS; i++) toRemove.add(`${tr},${i}`);
+        for (let i = 0; i < COLS; i++) {
+          const k = `${tr},${i}`;
+          if (!toRemove.has(k)) { toRemove.add(k); trackRemoval(k); }
+        }
       } else {
-        for (let i = 0; i < ROWS; i++) toRemove.add(`${i},${tc}`);
+        for (let i = 0; i < ROWS; i++) {
+          const k = `${i},${tc}`;
+          if (!toRemove.has(k)) { toRemove.add(k); trackRemoval(k); }
+        }
       }
     }
     score += toRemove.size * 15;
@@ -1158,12 +1218,16 @@ async function handleSpecialCombo(r1, c1, r2, c2) {
   // 炸弹 + 纸飞机 → 飞机带着炸弹飞
   if (types.has(TYPE_BOMB) && types.has(TYPE_PLANE)) {
     toRemove.add(`${r1},${c1}`); toRemove.add(`${r2},${c2}`);
+    trackRemoval(`${r1},${c1}`); trackRemoval(`${r2},${c2}`);
     const targets = findPlaneTargets(r1, c1, 2);
     for (const [tr, tc] of targets) {
       for (let dr = -1; dr <= 1; dr++)
         for (let dc = -1; dc <= 1; dc++) {
           const nr = tr+dr, nc = tc+dc;
-          if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) toRemove.add(`${nr},${nc}`);
+          if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+            const key = `${nr},${nc}`;
+            if (!toRemove.has(key)) { toRemove.add(key); trackRemoval(key); }
+          }
         }
     }
     score += toRemove.size * 15;
