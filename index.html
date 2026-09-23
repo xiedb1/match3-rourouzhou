@@ -705,70 +705,80 @@ function swapTiles(r1, c1, r2, c2) {
 
 // ===================== 匹配检测（支持L/T形）=====================
 function findMatches() {
-  // 先标记所有连续同色段
-  const hMatches = []; // 横向连续段 >=3
-  const vMatches = []; // 纵向连续段 >=3
+  const hMatches = [];
+  const vMatches = [];
 
+  // 横向检测：逐行扫描连续同色段
   for (let r = 0; r < ROWS; r++) {
-    let start = 0;
-    for (let c = 1; c <= COLS; c++) {
-      const same = c < COLS && board[r][c].color === board[r][start].color
-        && board[r][c].type === TYPE_NORMAL && board[r][start].type === TYPE_NORMAL
-        && board[r][c].obstacle === OBSTACLE_NONE && board[r][start].obstacle === OBSTACLE_NONE;
-      if (!same) {
-        if (c - start >= 3) {
-          const tiles = [];
-          for (let k = start; k < c; k++) tiles.push([r, k]);
-          hMatches.push({ tiles, dir: 'h', count: c - start, color: board[r][start].color });
-        }
-        start = c;
+    let c = 0;
+    while (c < COLS) {
+      // 跳过障碍物和特殊方块
+      if (board[r][c].obstacle !== OBSTACLE_NONE || board[r][c].type !== TYPE_NORMAL) {
+        c++;
+        continue;
       }
+      const color = board[r][c].color;
+      let end = c + 1;
+      while (end < COLS && board[r][end].color === color
+        && board[r][end].type === TYPE_NORMAL
+        && board[r][end].obstacle === OBSTACLE_NONE) {
+        end++;
+      }
+      if (end - c >= 3) {
+        const tiles = [];
+        for (let k = c; k < end; k++) tiles.push([r, k]);
+        hMatches.push({ tiles, dir: 'h', count: end - c, color });
+      }
+      c = end;
     }
   }
 
+  // 纵向检测
   for (let c = 0; c < COLS; c++) {
-    let start = 0;
-    for (let r = 1; r <= ROWS; r++) {
-      const same = r < ROWS && board[r][c].color === board[start][c].color
-        && board[r][c].type === TYPE_NORMAL && board[start][c].type === TYPE_NORMAL
-        && board[r][c].obstacle === OBSTACLE_NONE && board[start][c].obstacle === OBSTACLE_NONE;
-      if (!same) {
-        if (r - start >= 3) {
-          const tiles = [];
-          for (let k = start; k < r; k++) tiles.push([k, c]);
-          vMatches.push({ tiles, dir: 'v', count: r - start, color: board[start][c].color });
-        }
-        start = r;
+    let r = 0;
+    while (r < ROWS) {
+      if (board[r][c].obstacle !== OBSTACLE_NONE || board[r][c].type !== TYPE_NORMAL) {
+        r++;
+        continue;
       }
+      const color = board[r][c].color;
+      let end = r + 1;
+      while (end < ROWS && board[end][c].color === color
+        && board[end][c].type === TYPE_NORMAL
+        && board[end][c].obstacle === OBSTACLE_NONE) {
+        end++;
+      }
+      if (end - r >= 3) {
+        const tiles = [];
+        for (let k = r; k < end; k++) tiles.push([k, c]);
+        vMatches.push({ tiles, dir: 'v', count: end - r, color });
+      }
+      r = end;
     }
   }
 
-  // 检测L/T形交叉：横向和纵向有共享格子
+  // 检测L/T形交叉
   const result = [];
   const usedH = new Set(), usedV = new Set();
 
   for (let i = 0; i < hMatches.length; i++) {
     for (let j = 0; j < vMatches.length; j++) {
+      if (hMatches[i].color !== vMatches[j].color) continue;
       const hSet = new Set(hMatches[i].tiles.map(t => `${t[0]},${t[1]}`));
       const vSet = new Set(vMatches[j].tiles.map(t => `${t[0]},${t[1]}`));
-      // 检查是否有交叉点（同色）
-      if (hMatches[i].color !== vMatches[j].color) continue;
       let cross = null;
       for (const t of hMatches[i].tiles) {
         if (vSet.has(`${t[0]},${t[1]}`)) { cross = t; break; }
       }
       if (cross) {
-        // L/T形：合并所有格子
         const allTiles = [...hMatches[i].tiles, ...vMatches[j].tiles];
         const uniqueTiles = [...new Set(allTiles.map(t => `${t[0]},${t[1]}`))].map(s => s.split(',').map(Number));
-        const totalCount = uniqueTiles.length;
-        result.push({ tiles: uniqueTiles, dir: 'lt', count: totalCount, color: hMatches[i].color, cross });
+        result.push({ tiles: uniqueTiles, dir: 'lt', count: uniqueTiles.length, color: hMatches[i].color, cross });
         usedH.add(i); usedV.add(j);
       }
     }
   }
 
-  // 加上未合并的纯横向/纵向
   for (let i = 0; i < hMatches.length; i++) {
     if (!usedH.has(i)) result.push(hMatches[i]);
   }
