@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>肉肉的消消乐</title>
+<title>肉肉消消乐</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -400,7 +400,7 @@ h1 {
 </head>
 <body>
 
-<h1>肉肉的消消乐</h1>
+<h1>肉肉消消乐</h1>
 
 <div class="hud">
   <div class="hud-item"><span class="hud-label">关卡</span><span class="hud-value level" id="level">1</span></div>
@@ -549,6 +549,120 @@ function render() {
   }
 }
 
+// ===================== 滑动手势 =====================
+let swipeStart = null;
+const SWIPE_THRESHOLD = 20; // 滑动阈值（像素）
+
+function getTilePos(el) {
+  const r = parseInt(el.dataset.r);
+  const c = parseInt(el.dataset.c);
+  return { r, c };
+}
+
+// 获取方块元素中心坐标
+function getTileCenter(el) {
+  const rect = el.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+// 从坐标找到对应方块
+function getTileAtPoint(x, y) {
+  const rect = boardEl.getBoundingClientRect();
+  const styles = getComputedStyle(boardEl);
+  const ts = parseFloat(styles.getPropertyValue('--tile-size'));
+  const gap = parseFloat(styles.getPropertyValue('--gap'));
+  const pad = 12; // board-wrap padding
+  const localX = x - rect.left;
+  const localY = y - rect.top;
+  const step = ts + gap;
+  const c = Math.floor(localX / step);
+  const r = Math.floor(localY / step);
+  if (r >= 0 && r < ROWS && c >= 0 && c < COLS) return { r, c };
+  return null;
+}
+
+function onSwipeStart(x, y) {
+  if (processing) return;
+  const pos = getTileAtPoint(x, y);
+  if (!pos) return;
+  if (board[pos.r][pos.c].obstacle === OBSTACLE_BOX) return;
+  swipeStart = { x, y, r: pos.r, c: pos.c };
+}
+
+function onSwipeEnd(x, y) {
+  if (!swipeStart || processing) { swipeStart = null; return; }
+  const dx = x - swipeStart.x;
+  const dy = y - swipeStart.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  // 滑动距离不够，当作点击处理
+  if (absDx < SWIPE_THRESHOLD && absDy < SWIPE_THRESHOLD) {
+    swipeStart = null;
+    return; // 让click事件处理
+  }
+
+  let targetR = swipeStart.r;
+  let targetC = swipeStart.c;
+
+  if (absDx > absDy) {
+    // 水平滑动
+    targetC += dx > 0 ? 1 : -1;
+  } else {
+    // 垂直滑动
+    targetR += dy > 0 ? 1 : -1;
+  }
+
+  // 边界检查
+  if (targetR < 0 || targetR >= ROWS || targetC < 0 || targetC >= COLS) {
+    swipeStart = null;
+    return;
+  }
+
+  // 清除选中状态
+  if (selected) {
+    board[selected.r][selected.c].el.classList.remove('selected');
+    selected = null;
+  }
+
+  const r1 = swipeStart.r, c1 = swipeStart.c;
+  swipeStart = null;
+  trySwap(r1, c1, targetR, targetC);
+}
+
+// 触屏事件
+boardEl.addEventListener('touchstart', (e) => {
+  if (e.touches.length > 0) {
+    const t = e.touches[0];
+    onSwipeStart(t.clientX, t.clientY);
+  }
+}, { passive: true });
+
+boardEl.addEventListener('touchend', (e) => {
+  if (e.changedTouches.length > 0) {
+    const t = e.changedTouches[0];
+    onSwipeEnd(t.clientX, t.clientY);
+  }
+}, { passive: true });
+
+// 鼠标事件（PC端滑动）
+let mouseDown = false;
+boardEl.addEventListener('mousedown', (e) => {
+  mouseDown = true;
+  onSwipeStart(e.clientX, e.clientY);
+});
+
+boardEl.addEventListener('mouseup', (e) => {
+  if (mouseDown) {
+    mouseDown = false;
+    onSwipeEnd(e.clientX, e.clientY);
+  }
+});
+
+boardEl.addEventListener('mouseleave', () => {
+  if (mouseDown) { mouseDown = false; swipeStart = null; }
+});
+
 function getTileIcon(tile) {
   // 有障碍物的方块显示障碍物图标（CSS::after处理），底层名字隐藏
   if (tile.obstacle !== OBSTACLE_NONE) {
@@ -562,11 +676,11 @@ function getTileIcon(tile) {
 }
 
 function getSpecialIcon(type, color) {
-  if (type === TYPE_ROCKET_H) return `<span class="icon-small">🚀</span><span>${NAMES[color]}</span>`;
-  if (type === TYPE_ROCKET_V) return `<span class="icon-small">🚀</span><span>${NAMES[color]}</span>`;
-  if (type === TYPE_PLANE) return `<span class="icon-small">✈️</span><span>${NAMES[color]}</span>`;
-  if (type === TYPE_BOMB) return `<span class="icon-small">💣</span><span>${NAMES[color]}</span>`;
-  if (type === TYPE_RAINBOW) return `<span class="icon-small">🌈</span>`;
+  if (type === TYPE_ROCKET_H) return '<span class="icon-small">🚀</span>';
+  if (type === TYPE_ROCKET_V) return '<span class="icon-small">🚀</span>';
+  if (type === TYPE_PLANE) return '<span class="icon-small">✈️</span>';
+  if (type === TYPE_BOMB) return '<span class="icon-small">💣</span>';
+  if (type === TYPE_RAINBOW) return '<span class="icon-small">🌈</span>';
   return '';
 }
 
