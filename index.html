@@ -757,29 +757,7 @@ function findMatches() {
     }
   }
 
-  // 检测L/T形交叉
-  const result = [];
-  const usedH = new Set(), usedV = new Set();
-
-  for (let i = 0; i < hMatches.length; i++) {
-    for (let j = 0; j < vMatches.length; j++) {
-      if (hMatches[i].color !== vMatches[j].color) continue;
-      const hSet = new Set(hMatches[i].tiles.map(t => `${t[0]},${t[1]}`));
-      const vSet = new Set(vMatches[j].tiles.map(t => `${t[0]},${t[1]}`));
-      let cross = null;
-      for (const t of hMatches[i].tiles) {
-        if (vSet.has(`${t[0]},${t[1]}`)) { cross = t; break; }
-      }
-      if (cross) {
-        const allTiles = [...hMatches[i].tiles, ...vMatches[j].tiles];
-        const uniqueTiles = [...new Set(allTiles.map(t => `${t[0]},${t[1]}`))].map(s => s.split(',').map(Number));
-        result.push({ tiles: uniqueTiles, dir: 'lt', count: uniqueTiles.length, color: hMatches[i].color, cross });
-        usedH.add(i); usedV.add(j);
-      }
-    }
-  }
-
-  // 检测田字形（2×2正方形）
+  // 先检测田字形（2×2正方形），优先级最高
   const squareMatches = [];
   const usedBySquare = new Set();
   for (let r = 0; r < ROWS - 1; r++) {
@@ -798,27 +776,37 @@ function findMatches() {
     }
   }
 
-  // 加入田字形匹配（优先级高，不和L/T形重复）
-  for (const sq of squareMatches) {
-    // 检查是否和已有L/T形重叠
-    const overlap = sq.tiles.some(t => {
-      return result.some(m => m.tiles.some(mt => mt[0] === t[0] && mt[1] === t[1]));
-    });
-    if (!overlap) result.push(sq);
+  // 过滤掉被田字形包含的横向/纵向匹配
+  const hMatchFiltered = hMatches.filter(m => !m.tiles.some(t => usedBySquare.has(`${t[0]},${t[1]}`)));
+  const vMatchFiltered = vMatches.filter(m => !m.tiles.some(t => usedBySquare.has(`${t[0]},${t[1]}`)));
+
+  // 检测L/T形交叉（在田字形之后）
+  const result = [...squareMatches];
+  const usedH = new Set(), usedV = new Set();
+
+  for (let i = 0; i < hMatchFiltered.length; i++) {
+    for (let j = 0; j < vMatchFiltered.length; j++) {
+      if (hMatchFiltered[i].color !== vMatchFiltered[j].color) continue;
+      const hSet = new Set(hMatchFiltered[i].tiles.map(t => `${t[0]},${t[1]}`));
+      const vSet = new Set(vMatchFiltered[j].tiles.map(t => `${t[0]},${t[1]}`));
+      let cross = null;
+      for (const t of hMatchFiltered[i].tiles) {
+        if (vSet.has(`${t[0]},${t[1]}`)) { cross = t; break; }
+      }
+      if (cross) {
+        const allTiles = [...hMatchFiltered[i].tiles, ...vMatchFiltered[j].tiles];
+        const uniqueTiles = [...new Set(allTiles.map(t => `${t[0]},${t[1]}`))].map(s => s.split(',').map(Number));
+        result.push({ tiles: uniqueTiles, dir: 'lt', count: uniqueTiles.length, color: hMatchFiltered[i].color, cross });
+        usedH.add(i); usedV.add(j);
+      }
+    }
   }
 
-  for (let i = 0; i < hMatches.length; i++) {
-    if (!usedH.has(i)) {
-      // 跳过已被田字形包含的
-      const overlap = hMatches[i].tiles.some(t => usedBySquare.has(`${t[0]},${t[1]}`));
-      if (!overlap) result.push(hMatches[i]);
-    }
+  for (let i = 0; i < hMatchFiltered.length; i++) {
+    if (!usedH.has(i)) result.push(hMatchFiltered[i]);
   }
-  for (let j = 0; j < vMatches.length; j++) {
-    if (!usedV.has(j)) {
-      const overlap = vMatches[j].tiles.some(t => usedBySquare.has(`${t[0]},${t[1]}`));
-      if (!overlap) result.push(vMatches[j]);
-    }
+  for (let j = 0; j < vMatchFiltered.length; j++) {
+    if (!usedV.has(j)) result.push(vMatchFiltered[j]);
   }
 
   return result;
@@ -885,7 +873,12 @@ async function processChain() {
 
     // 特殊方块引爆
     const expanded = expandSpecials(toRemove);
-    for (const sp of specialsToCreate) expanded.delete(`${sp.r},${sp.c}`);
+
+    // 从消除集合中移除特殊方块生成位置，确保它们不被清除
+    for (const sp of specialsToCreate) {
+      expanded.delete(`${sp.r},${sp.c}`);
+      toRemove.delete(`${sp.r},${sp.c}`); // 确保原始集合也不含
+    }
 
     await removeAndCascade(expanded, specialsToCreate);
     updateHUD();
@@ -1292,9 +1285,8 @@ async function removeAndCascade(toRemove, specialsToCreate = []) {
 
   // 放置特殊方块
   for (const sp of specialsToCreate) {
-    if (board[sp.r][sp.c] === null) {
-      board[sp.r][sp.c] = { color: sp.color, type: sp.type, obstacle: OBSTACLE_NONE, hp: 0, el: null };
-    }
+    // 强制放置：无论该位置当前状态如何
+    board[sp.r][sp.c] = { color: sp.color, type: sp.type, obstacle: OBSTACLE_NONE, hp: 0, el: null };
   }
 
   dropAndFill();
